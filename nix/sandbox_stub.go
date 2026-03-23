@@ -8,6 +8,6 @@ func sandboxAvailable() bool {
 }
 
 // generateSBPL is a no-op on non-darwin platforms.
-func generateSBPL(closurePaths []string, taskDir string, profileBinPath string) string {
+func generateSBPL(closurePaths []string, taskDir string, allocDir string, profileBinPath string) string {
 	return ""
 }
