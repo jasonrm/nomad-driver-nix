@@ -10,7 +10,8 @@ job "nix-example-slow-build" {
 
       config {
         packages = [
-          "path:.#slow-hello"
+          "path:.#slow-hello",
+          "nixpkgs#bash",
         ]
         command = "slow-hello"
       }
@@ -39,7 +40,7 @@ job "nix-example-slow-build" {
                     sleep 5
                     mkdir -p $out/bin
                     cat > $out/bin/slow-hello << 'SCRIPT'
-                    #!/bin/sh
+                    #!/usr/bin/env bash
                     echo "Hello from the slow build!"
                     SCRIPT
                     chmod +x $out/bin/slow-hello
