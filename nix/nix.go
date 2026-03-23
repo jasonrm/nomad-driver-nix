@@ -255,7 +255,6 @@ func nixBuildProfile(taskDir string, flakes []string, link string, opts *NixOpti
 					progress(text)
 				}
 			case actSubstitute:
-				// Substitute text may be empty; fall back to fields [storePath, host]
 				desc := text
 				if desc == "" {
 					var fields []string
@@ -263,10 +262,7 @@ func nixBuildProfile(taskDir string, flakes []string, link string, opts *NixOpti
 						desc = fmt.Sprintf("substituting '%s' from '%s'", fields[0], fields[1])
 					}
 				}
-				logger.Info("nix", "substitute", desc)
-				if progress != nil {
-					progress(desc)
-				}
+				logger.Debug("nix", "substitute", desc)
 			case actCopyPath:
 				logger.Info("nix", "copy-path", text)
 				if progress != nil {
