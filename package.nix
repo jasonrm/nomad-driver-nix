@@ -1,11 +1,16 @@
 {
   lib,
   buildGoModule,
+  rev ? null,
 }:
 
 buildGoModule (finalAttrs: {
   pname = "nomad-driver-nix";
-  version = (builtins.fromJSON (builtins.readFile ./metadata.json)).version;
+  version =
+    let
+      base = (builtins.fromJSON (builtins.readFile ./metadata.json)).version;
+    in
+    if rev != null then "${base}+git.${rev}" else base;
 
   src = lib.fileset.toSource {
     root = ./.;

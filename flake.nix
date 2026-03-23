@@ -14,7 +14,9 @@
     }:
     {
       overlays.default = final: prev: {
-        nomad-driver-nix = final.callPackage ./package.nix { };
+        nomad-driver-nix = final.callPackage ./package.nix {
+          rev = self.shortRev or self.dirtyShortRev or "unknown";
+        };
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -87,7 +89,9 @@
       in
       {
         packages = {
-          nomad-driver-nix = pkgs.callPackage ./package.nix { };
+          nomad-driver-nix = pkgs.callPackage ./package.nix {
+            rev = self.shortRev or self.dirtyShortRev or "unknown";
+          };
           default = self.packages.${system}.nomad-driver-nix;
         };
 
