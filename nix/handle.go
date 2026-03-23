@@ -1,3 +1,6 @@
+// Copyright IBM Corp. 2015, 2025
+// SPDX-License-Identifier: BUSL-1.1
+
 package nix
 
 import (
@@ -6,10 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/nomad/drivers/shared/executor"
-
 	hclog "github.com/hashicorp/go-hclog"
 	plugin "github.com/hashicorp/go-plugin"
+	"github.com/hashicorp/nomad/drivers/shared/executor"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
 
@@ -74,5 +76,6 @@ func (h *taskHandle) run() {
 	h.procState = drivers.TaskStateExited
 	h.exitResult.ExitCode = ps.ExitCode
 	h.exitResult.Signal = ps.Signal
+	h.exitResult.OOMKilled = ps.OOMKilled
 	h.completedAt = ps.Time
 }
