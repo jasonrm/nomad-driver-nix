@@ -560,6 +560,9 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 		}
 	}
 
+	// Always include coreutils for a baseline environment (env, cat, ls, etc.)
+	driverConfig.Packages = append(driverConfig.Packages, nixpkgs+"#coreutils")
+
 	// Emit build event
 	d.eventer.EmitEvent(&drivers.TaskEvent{
 		TaskID:    cfg.ID,
@@ -657,6 +660,18 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 				PropagationMode: "private",
 			})
 		}
+	}
+
+	// Mount /usr/bin/env if available in the profile, since #!/usr/bin/env
+	// is the standard shebang convention for portable scripts.
+	envPath := filepath.Join(nixResult.BinPath, "env")
+	if _, err := os.Stat(envPath); err == nil {
+		cfg.Mounts = append(cfg.Mounts, &drivers.MountConfig{
+			TaskPath:        "/usr/bin/env",
+			HostPath:        envPath,
+			Readonly:        true,
+			PropagationMode: "private",
+		})
 	}
 
 	d.logger.Info("adding mounts for Nix closure and system files", "mount_count", len(cfg.Mounts))
