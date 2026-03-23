@@ -681,6 +681,20 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 
 	cfg.Env["PATH"] = "/bin"
 
+	// Resolve the command to an absolute path using the nix profile's bin
+	// directory. The executor's lookupBin validates the command on the host
+	// filesystem before the container's bind mounts are set up. Since nix
+	// store paths are mounted at their original locations inside the
+	// container (and exist on the host), using the absolute store path
+	// satisfies both the pre-launch check and in-container execution.
+	cmd := driverConfig.Command
+	if !filepath.IsAbs(cmd) {
+		absCmd := filepath.Join(nixResult.BinPath, cmd)
+		if _, err := os.Stat(absCmd); err == nil {
+			cmd = absCmd
+		}
+	}
+
 	caps, err := capabilities.Calculate(
 		capabilities.NomadDefaults(), d.config.AllowCaps, driverConfig.CapAdd, driverConfig.CapDrop,
 	)
@@ -690,7 +704,7 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 	}
 
 	execCmd := &executor.ExecCommand{
-		Cmd:              driverConfig.Command,
+		Cmd:              cmd,
 		Args:             driverConfig.Args,
 		Env:              taskEnvList(cfg.Env),
 		User:             user,

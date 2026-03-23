@@ -65,6 +65,12 @@
         nomad-dev-agent = pkgs.writeShellScriptBin "nomad-dev-agent" ''
           set -euo pipefail
           ${nomad-dev-build}/bin/nomad-dev-build
+          ${pkgs.lib.optionalString pkgs.stdenv.isLinux ''
+            if [ "$(id -u)" -ne 0 ]; then
+              echo "Root required on Linux for nix driver isolation, re-executing with sudo..."
+              exec sudo --preserve-env=PATH,NOMAD_ADDR "$(${pkgs.coreutils}/bin/realpath "$0")" "$@"
+            fi
+          ''}
           mkdir -p .nomad-dev-data
           echo "Starting Nomad dev agent on http://127.0.0.1:14646 ..."
           REALDIR="$(${pkgs.coreutils}/bin/realpath .)"
