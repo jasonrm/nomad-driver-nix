@@ -95,6 +95,14 @@ func prepareNixPackages(taskDir string, packages []string, nixpkgs string, opts 
 	mounts := make(hclutils.MapStrStr)
 
 	profileLink := filepath.Join(taskDir, "current-profile")
+	// Remove any stale profile from a previous attempt (e.g., task restart)
+	// to avoid "already added" warnings from nix profile add. Nix creates
+	// generation links (current-profile-*-link) alongside the main symlink.
+	if matches, err := filepath.Glob(profileLink + "*"); err == nil {
+		for _, m := range matches {
+			os.Remove(m)
+		}
+	}
 	profile, err := nixBuildProfile(taskDir, packages, profileLink, opts, logger, progress)
 	if err != nil {
 		return nil, fmt.Errorf("build of nix profile failed: %v", err)
