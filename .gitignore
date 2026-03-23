@@ -1,0 +1,6 @@
+nomad-driver-*
+*-driver
+.nomad-dev-data
+.direnv
+result
+alloc_mounts/
