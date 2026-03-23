@@ -763,10 +763,18 @@ func (d *Driver) startTaskDarwin(cfg *drivers.TaskConfig, driverConfig *TaskConf
 		d.logger.Warn("cap_add/cap_drop are ignored on macOS")
 	}
 
-	// Set PATH to include the nix profile's bin directory
-	cfg.Env["PATH"] = nixResult.BinPath + ":/usr/bin:/bin:/usr/sbin:/sbin"
+	// Set PATH to the nix profile's bin directory only
+	cfg.Env["PATH"] = nixResult.BinPath
 
+	// Resolve the command to an absolute path using the nix profile's bin
+	// directory, so the executor can find it without relying on PATH lookup.
 	cmd := driverConfig.Command
+	if !filepath.IsAbs(cmd) {
+		absCmd := filepath.Join(nixResult.BinPath, cmd)
+		if _, err := os.Stat(absCmd); err == nil {
+			cmd = absCmd
+		}
+	}
 	args := driverConfig.Args
 
 	// If sandbox-exec is available and sandbox is enabled, wrap the command.

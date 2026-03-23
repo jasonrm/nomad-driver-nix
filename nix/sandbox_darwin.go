@@ -28,15 +28,13 @@ func generateSBPL(closurePaths []string, taskDir string, allocDir string, profil
 	sb.WriteString("(allow signal (target self))\n")
 	sb.WriteString("(allow sysctl-read)\n\n")
 
-	// Limit process-exec to nix store and essential system binaries
+	// Limit process-exec to nix closure paths and /usr/bin/env (for shebangs)
 	sb.WriteString("; Executable paths\n")
 	for _, p := range closurePaths {
 		sb.WriteString(fmt.Sprintf("(allow process-exec (subpath \"%s\"))\n", p))
 	}
-	sb.WriteString("(allow process-exec (subpath \"/usr/bin\"))\n")
-	sb.WriteString("(allow process-exec (subpath \"/usr/sbin\"))\n")
-	sb.WriteString("(allow process-exec (subpath \"/bin\"))\n")
-	sb.WriteString("(allow process-exec (subpath \"/sbin\"))\n\n")
+	sb.WriteString("(allow process-exec (literal \"/usr/bin/env\"))\n")
+	sb.WriteString("\n")
 
 	// Mach IPC — allow only common system services
 	sb.WriteString("; Mach IPC\n")
@@ -74,12 +72,9 @@ func generateSBPL(closurePaths []string, taskDir string, allocDir string, profil
 	sb.WriteString("(allow file-read* (literal \"/private/etc/localtime\"))\n")
 	sb.WriteString("(allow file-read* (subpath \"/var/db/timezone\"))\n")
 	sb.WriteString("(allow file-read* (subpath \"/private/var/db/timezone\"))\n")
+	// dyld cache and system frameworks needed by all dynamically-linked binaries
 	sb.WriteString("(allow file-read* (subpath \"/usr/lib\"))\n")
-	sb.WriteString("(allow file-read* (subpath \"/usr/share\"))\n")
-	sb.WriteString("(allow file-read* (subpath \"/System\"))\n")
-	sb.WriteString("(allow file-read* (subpath \"/Library/Preferences\"))\n")
-	// /var/select contains symlinks to shell interpreters (e.g. /private/var/select/sh)
-	sb.WriteString("(allow file-read* (subpath \"/private/var/select\"))\n\n")
+	sb.WriteString("(allow file-read* (subpath \"/System\"))\n\n")
 
 	// Nix store — read only closure paths
 	sb.WriteString("; Nix store closure paths\n")
