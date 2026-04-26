@@ -38,6 +38,16 @@ Add the flake as an input and apply the overlay:
 }
 ```
 
+On NixOS, pass the plugin to `extraSettingsPlugins` and add `nix` to `extraPackages` so the Nomad service can find the `nix` binary. Also add a `plugin "nomad-driver-nix"` stanza — Nomad skips plugins not referenced in the agent config:
+
+```nix
+services.nomad = {
+  extraSettingsPlugins = [ pkgs.nomad-driver-nix ];
+  extraPackages = [ pkgs.nix ];
+  settings.plugin.nomad-driver-nix.config = {};
+};
+```
+
 ### Direct package reference
 
 Reference the package directly from the flake without an overlay:
@@ -52,7 +62,7 @@ nomad-driver-nix.packages.${system}.nomad-driver-nix
 make build
 ```
 
-This produces a `nix-driver` binary. Version is injected from git tags:
+This produces a `nomad-driver-nix` binary. Version is injected from git tags:
 
 ```sh
 VERSION=0.2.0 make build
@@ -60,10 +70,10 @@ VERSION=0.2.0 make build
 
 ## Agent configuration
 
-The plugin is configured in the Nomad agent config under `plugin "nix-driver"`. See [`example/agent.hcl`](example/agent.hcl) for a full example.
+The plugin is configured in the Nomad agent config under `plugin "nomad-driver-nix"`. See [`example/agent.hcl`](example/agent.hcl) for a full example.
 
 ```hcl
-plugin "nix-driver" {
+plugin "nomad-driver-nix" {
   config {
     # Nixpkgs flake ref used when packages start with "#"
     default_nixpkgs = "github:nixos/nixpkgs/nixos-25.11"
