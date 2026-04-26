@@ -3,7 +3,7 @@
 client {
 }
 
-plugin "nix-driver" {
+plugin "nomad-driver-nix" {
   config {
     default_nixpkgs = "github:nixos/nixpkgs/nixos-25.11"
     allow_privileged = true
