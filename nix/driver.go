@@ -3,6 +3,8 @@ package nix
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -265,6 +267,19 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	nixResult, err := prepareNixPackages(taskDirs.Dir, driverConfig.Packages, nixpkgs, d.config.NixOptionsForNamespace(cfg.Namespace), d.logger, progress)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	// Symlink the merged nix profile into the task's local dir so HCL
+	// interpolation (${NOMAD_TASK_DIR}/nix-profile/...) and template renders
+	// ({{ env "NOMAD_TASK_DIR" }}/nix-profile/...) can refer to package
+	// contents without baking nix store paths into job specs. The symlink
+	// target is a store path; on Linux the closure is bind-mounted at the
+	// same paths inside the container, on macOS the SBPL allow list already
+	// covers it.
+	profileSymlink := filepath.Join(taskDirs.LocalDir, "nix-profile")
+	_ = os.Remove(profileSymlink)
+	if err := os.Symlink(nixResult.ProfilePath, profileSymlink); err != nil {
+		return nil, nil, fmt.Errorf("failed to symlink nix profile into task dir: %v", err)
 	}
 
 	switch runtime.GOOS {

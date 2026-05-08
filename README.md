@@ -190,6 +190,21 @@ task "example" {
 | `cap_add` | `list(string)` | no | `[]` | Linux-only: additional Linux capabilities |
 | `cap_drop` | `list(string)` | no | `[]` | Linux-only: capabilities to drop |
 
+## Task environment
+
+Each task is launched with these environment variables in addition to the standard Nomad set:
+
+| Variable | Description |
+|----------|-------------|
+| `PATH` | On Linux, set to `/bin` (the profile's `bin/` is bind-mounted there); on macOS, set to the profile's `bin/` store path directly. |
+
+The driver also creates a stable symlink at `${NOMAD_TASK_DIR}/nix-profile` pointing to the merged nix profile. Reference it from `args`, `command`, and `template` blocks to point at package contents without baking nix store paths into job specs:
+
+- HCL interpolation: `args = ["-c", "${NOMAD_TASK_DIR}/nix-profile/etc/foo.conf"]`
+- Templates: `{{ env "NOMAD_TASK_DIR" }}/nix-profile/share/foo`
+
+The symlink target is the underlying store path. On Linux the closure is bind-mounted into the container at the same paths, and on macOS the SBPL allow list already covers it, so the symlink resolves correctly at task runtime in both cases.
+
 ## Examples
 
 ### Batch job
@@ -250,6 +265,34 @@ job "nix-example-service" {
   }
 }
 ```
+
+### Referencing package contents in templates (`nix-profile` symlink)
+
+The driver symlinks the merged nix profile into the task's local dir as `nix-profile`. Use it from `template` blocks (and any config rendered by consul-template) to point at files inside installed packages without hard-coding nix store paths:
+
+```hcl
+task "nginx" {
+  driver = "nix"
+
+  config {
+    packages = ["#nginx"]
+    command  = "nginx"
+    args     = ["-c", "${NOMAD_TASK_DIR}/nginx.conf", "-g", "daemon off;"]
+  }
+
+  template {
+    destination = "local/nginx.conf"
+    data        = <<EOH
+http {
+  include {{ env "NOMAD_TASK_DIR" }}/nix-profile/conf/mime.types;
+  ...
+}
+EOH
+  }
+}
+```
+
+See [`example/example-nix-profile.hcl`](example/example-nix-profile.hcl) for a full working example.
 
 ### Git repository as flake source
 
