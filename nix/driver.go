@@ -125,7 +125,11 @@ var (
 	driverCapabilities = &drivers.Capabilities{
 		SendSignals: true,
 		Exec:        true,
-		FSIsolation: drivers.FSIsolationNone,
+		// On Linux the executor chroots the task into a tree containing only
+		// the configured mounts, so Nomad must populate NOMAD_TASK_DIR and
+		// related env vars with their in-chroot paths (e.g. /local) rather
+		// than host paths. On other platforms there is no chroot.
+		FSIsolation: fsIsolation(),
 		NetIsolationModes: []drivers.NetIsolationMode{
 			drivers.NetIsolationModeHost,
 			drivers.NetIsolationModeGroup,
@@ -133,6 +137,13 @@ var (
 		MountConfigs: drivers.MountConfigSupportAll,
 	}
 )
+
+func fsIsolation() drivers.FSIsolation {
+	if runtime.GOOS == "linux" {
+		return drivers.FSIsolationChroot
+	}
+	return drivers.FSIsolationNone
+}
 
 // Driver implements the Nomad driver plugin interface for running Nix-built tasks.
 type Driver struct {

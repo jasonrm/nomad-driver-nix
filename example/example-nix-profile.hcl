@@ -2,22 +2,22 @@ job "nix-example-profile-symlink" {
   datacenters = ["dc1"]
   type        = "service"
 
-  # Demonstrates the ${NOMAD_TASK_DIR}/nix-profile symlink. The driver creates
-  # a symlink in the task's local dir pointing at the merged nix profile so
-  # templates and configs can refer to package contents without baking nix
-  # store paths into wrapper scripts.
+  # Demonstrates the nix-profile symlink. The driver creates a symlink in
+  # the task's local dir pointing at the merged nix profile so templates
+  # and configs can refer to package contents without baking nix store
+  # paths into wrapper scripts.
   #
-  # Here, nginx is configured entirely from a Nomad template that includes
-  # ${NOMAD_TASK_DIR}/nix-profile/conf/mime.types — the path resolves on both
-  # Linux (closure is bind-mounted at original store paths in the container)
-  # and macOS (SBPL allow list covers the closure).
+  # Paths use the standard Nomad ${NOMAD_TASK_DIR} / {{ env "NOMAD_TASK_DIR" }}
+  # interpolations. On Linux Nomad sets these to the in-chroot path
+  # (/local) since the driver advertises FSIsolationChroot; on macOS they
+  # resolve to the host alloc path. Either way the same job spec works.
   #
   # nginx is fully configured from a template:
   #   - error_log uses the "stderr" keyword (inherited fd 2), so nginx never
   #     tries to open /dev/stderr — important under the macOS sandbox, which
   #     only permits writes under the task dir, /dev/null, and ttys.
-  #   - all temp paths are redirected under ${NOMAD_TASK_DIR} so nginx does
-  #     not try to mkdir its compiled-in defaults (/var/cache/nginx/...).
+  #   - all temp paths are redirected under the task dir so nginx does not
+  #     try to mkdir its compiled-in defaults (/var/cache/nginx/...).
   #   - -e /dev/null suppresses the early-startup error log file that nginx
   #     opens before parsing the config.
 
