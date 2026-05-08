@@ -198,10 +198,12 @@ Each task is launched with these environment variables in addition to the standa
 |----------|-------------|
 | `PATH` | On Linux, set to `/bin` (the profile's `bin/` is bind-mounted there); on macOS, set to the profile's `bin/` store path directly. |
 
-The driver also creates a stable symlink at `${NOMAD_TASK_DIR}/nix-profile` pointing to the merged nix profile. Reference it from `args`, `command`, and `template` blocks to point at package contents without baking nix store paths into job specs:
+The driver also creates a stable symlink at `nix-profile` inside the task's local dir, pointing to the merged nix profile. Reference it from `args`, `command`, and `template` blocks via the standard Nomad task-dir env vars to point at package contents without baking nix store paths into job specs:
 
 - HCL interpolation: `args = ["-c", "${NOMAD_TASK_DIR}/nix-profile/etc/foo.conf"]`
 - Templates: `{{ env "NOMAD_TASK_DIR" }}/nix-profile/share/foo`
+
+> **Note:** the driver advertises `FSIsolationChroot` on Linux, so Nomad expands `${NOMAD_TASK_DIR}`, `${NOMAD_SECRETS_DIR}`, and `${NOMAD_ALLOC_DIR}` to the in-chroot paths (`/local`, `/secrets`, `/alloc`). On macOS there is no chroot and the same vars expand to the host alloc path. Either way, using `${NOMAD_TASK_DIR}` keeps the job spec portable. Avoid hardcoding `/local/...` — that literal path only exists inside the Linux chroot.
 
 The symlink target is the underlying store path. On Linux the closure is bind-mounted into the container at the same paths, and on macOS the SBPL allow list already covers it, so the symlink resolves correctly at task runtime in both cases.
 

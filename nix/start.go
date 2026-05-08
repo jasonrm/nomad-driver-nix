@@ -13,12 +13,19 @@ import (
 )
 
 func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfig, handle *drivers.TaskHandle, nixResult *NixPrepResult) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
-	useSandbox := driverConfig.Sandbox || !d.config.AllowPrivilegedForNamespace(cfg.Namespace)
+	// On Linux the driver advertises FSIsolationChroot, so Nomad fills env
+	// vars (NOMAD_TASK_DIR etc.) with chroot-relative paths. Honoring a
+	// per-task sandbox=false would skip the chroot and leave those env vars
+	// pointing at unreachable host paths. Warn and ignore.
+	if !driverConfig.Sandbox && d.config.AllowPrivilegedForNamespace(cfg.Namespace) {
+		d.logger.Warn("ignoring sandbox=false on Linux; chroot is required for correct task env paths",
+			"task_name", handle.Config.Name, "alloc_id", handle.Config.AllocID)
+	}
 	pluginLogFile := filepath.Join(cfg.TaskDir().Dir, "executor.out")
 	executorConfig := &executor.ExecutorConfig{
 		LogFile:     pluginLogFile,
 		LogLevel:    "debug",
-		FSIsolation: useSandbox,
+		FSIsolation: true,
 		Compute:     d.compute,
 	}
 
