@@ -4,13 +4,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
-	hclog "github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/nomad/drivers/shared/capabilities"
 	"github.com/hashicorp/nomad/drivers/shared/executor"
 	"github.com/hashicorp/nomad/drivers/shared/resolvconf"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
+
+// envKeys returns the sorted list of variable names from a "KEY=VALUE" env
+// list, dropping values so secrets aren't logged.
+func envKeys(env []string) []string {
+	keys := make([]string, 0, len(env))
+	for _, kv := range env {
+		if i := strings.IndexByte(kv, '='); i >= 0 {
+			keys = append(keys, kv[:i])
+		} else {
+			keys = append(keys, kv)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
 
 func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfig, handle *drivers.TaskHandle, nixResult *NixPrepResult) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {
 	// On Linux the driver advertises FSIsolationChroot, so Nomad fills env
@@ -138,7 +154,7 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 	execCmd := &executor.ExecCommand{
 		Cmd:              cmd,
 		Args:             driverConfig.Args,
-		Env:              taskEnvList(cfg.Env),
+		Env:              cfg.EnvList(),
 		User:             user,
 		ResourceLimits:   true,
 		NoPivotRoot:      d.config.NoPivotRoot,
@@ -154,7 +170,13 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 		Capabilities:     caps,
 	}
 
-	d.logger.Info("launching with", "exec_cmd", hclog.Fmt("%+v", execCmd))
+	d.logger.Info("launching",
+		"cmd", execCmd.Cmd,
+		"args", execCmd.Args,
+		"user", execCmd.User,
+		"task_dir", execCmd.TaskDir,
+		"env_keys", envKeys(execCmd.Env),
+	)
 
 	ps, err := exec.Launch(execCmd)
 	if err != nil {
@@ -234,7 +256,7 @@ func (d *Driver) startTaskDarwin(cfg *drivers.TaskConfig, driverConfig *TaskConf
 	execCmd := &executor.ExecCommand{
 		Cmd:              cmd,
 		Args:             args,
-		Env:              taskEnvList(cfg.Env),
+		Env:              cfg.EnvList(),
 		User:             user,
 		Resources:        cfg.Resources,
 		TaskDir:          cfg.TaskDir().Dir,
@@ -245,7 +267,13 @@ func (d *Driver) startTaskDarwin(cfg *drivers.TaskConfig, driverConfig *TaskConf
 		NetworkIsolation: cfg.NetworkIsolation,
 	}
 
-	d.logger.Info("launching with", "exec_cmd", hclog.Fmt("%+v", execCmd))
+	d.logger.Info("launching",
+		"cmd", execCmd.Cmd,
+		"args", execCmd.Args,
+		"user", execCmd.User,
+		"task_dir", execCmd.TaskDir,
+		"env_keys", envKeys(execCmd.Env),
+	)
 
 	ps, err := exec.Launch(execCmd)
 	if err != nil {
