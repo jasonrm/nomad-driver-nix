@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -178,8 +177,12 @@ func nixBuildProfile(taskDir string, flakes []string, link string, opts *NixOpti
 		return "", fmt.Errorf("failed to start nix: %v", err)
 	}
 
-	var stderrBuf bytes.Buffer
-	scanner := bufio.NewScanner(io.TeeReader(stderrPipe, &stderrBuf))
+	// Collect error-level messages and non-JSON stderr lines for failure reporting.
+	// Avoid buffering the full @nix internal-json stream since it can be megabytes.
+	var errorMsgs []string
+	var nonJSONLines []string
+	scanner := bufio.NewScanner(stderrPipe)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 
 	// Buffer for combining multi-line msg events (e.g. "this derivation will be built:"
 	// followed by indented store paths).
@@ -196,6 +199,9 @@ func nixBuildProfile(taskDir string, flakes []string, link string, opts *NixOpti
 		nixJSON, isNixJSON := strings.CutPrefix(line, "@nix ")
 		if !isNixJSON {
 			logger.Info("nix", "output", line)
+			if trimmed := strings.TrimSpace(line); trimmed != "" {
+				nonJSONLines = append(nonJSONLines, trimmed)
+			}
 			continue
 		}
 
@@ -216,6 +222,11 @@ func nixBuildProfile(taskDir string, flakes []string, link string, opts *NixOpti
 				logger.Info("nix", "msg", msg)
 			default:
 				logger.Trace("nix", "msg", msg)
+			}
+			if action.Level == 0 {
+				collapsed := strings.Join(strings.Fields(msg), " ")
+				collapsed = strings.TrimPrefix(collapsed, "error: ")
+				errorMsgs = append(errorMsgs, collapsed)
 			}
 			if action.Level <= 3 {
 				// Indented lines (e.g. store paths) belong with the previous header
@@ -304,7 +315,11 @@ func nixBuildProfile(taskDir string, flakes []string, link string, opts *NixOpti
 	flushPendingMsg()
 
 	if err := cmd.Wait(); err != nil {
-		return "", fmt.Errorf("%v failed: %s. Err: %v", cmd.Args, stderrBuf.String(), err)
+		summary := summarizeNixErrors(errorMsgs, nonJSONLines)
+		if summary == "" {
+			return "", fmt.Errorf("nix profile add failed: %v", err)
+		}
+		return "", fmt.Errorf("nix profile add failed: %s (%v)", summary, err)
 	}
 
 	if target, err := os.Readlink(link); err == nil {
@@ -392,6 +407,36 @@ func nixVersion() (string, error) {
 		return parts[len(parts)-1], nil
 	}
 	return out, nil
+}
+
+// summarizeNixErrors joins level-0 error messages from the nix output, capped
+// at maxLen so the failure event description stays readable. Nix emits the
+// root cause first followed by cascade summaries — keeping them in order
+// preserves that signal without dumping the full internal-json stream.
+func summarizeNixErrors(errorMsgs, nonJSONLines []string) string {
+	const maxLen = 2000
+	truncate := func(s string) string {
+		if len(s) > maxLen {
+			return s[:maxLen] + "… (truncated)"
+		}
+		return s
+	}
+	seen := make(map[string]struct{}, len(errorMsgs))
+	var uniq []string
+	for _, m := range errorMsgs {
+		if _, ok := seen[m]; ok {
+			continue
+		}
+		seen[m] = struct{}{}
+		uniq = append(uniq, m)
+	}
+	if len(uniq) > 0 {
+		return truncate(strings.Join(uniq, " | "))
+	}
+	if len(nonJSONLines) > 0 {
+		return truncate(strings.Join(nonJSONLines, " | "))
+	}
+	return ""
 }
 
 func formatSize(bytes uint64) string {
