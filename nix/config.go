@@ -3,8 +3,6 @@ package nix
 import (
 	"fmt"
 	"runtime"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/hashicorp/nomad/drivers/shared/capabilities"
@@ -175,18 +173,3 @@ type TaskState struct {
 	StartedAt      time.Time
 }
 
-// taskEnvList returns a filtered environment variable list for task execution.
-// Nomad's cfg.Env includes host environment variables by default. The nix
-// driver runs tasks in an isolated environment and should not leak the host
-// env. We only keep NOMAD_* (Nomad metadata/service discovery) and PATH
-// (which the driver sets to the nix profile bin directory).
-func taskEnvList(env map[string]string) []string {
-	l := make([]string, 0, len(env))
-	for k, v := range env {
-		if strings.HasPrefix(k, "NOMAD_") || k == "PATH" {
-			l = append(l, k+"="+v)
-		}
-	}
-	sort.Strings(l)
-	return l
-}
