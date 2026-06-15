@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/nomad/drivers/shared/capabilities"
 	"github.com/hashicorp/nomad/drivers/shared/executor"
+	"github.com/hashicorp/nomad/drivers/shared/hostnames"
 	"github.com/hashicorp/nomad/drivers/shared/resolvconf"
 	"github.com/hashicorp/nomad/plugins/drivers"
 )
@@ -73,8 +74,21 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 		"/etc/passwd",
 	}
 
-	if cfg.DNS != nil {
-		dnsMount, err := resolvconf.GenerateDNSMount(cfg.TaskDir().Dir, cfg.DNS)
+	dnsConfig := cfg.DNS
+	if dnsConfig == nil {
+		fallbackDNS, reason, err := defaultDNSConfig("/etc/resolv.conf")
+		if err != nil {
+			d.logger.Warn("failed to inspect host resolv.conf for fallback DNS", "error", err)
+		} else if fallbackDNS != nil {
+			dnsConfig = fallbackDNS
+			d.logger.Info("using fallback DNS servers for Linux chroot",
+				"reason", reason,
+				"servers", strings.Join(fallbackDNS.Servers, ","),
+			)
+		}
+	}
+	if dnsConfig != nil {
+		dnsMount, err := resolvconf.GenerateDNSMount(cfg.TaskDir().Dir, dnsConfig)
 		if err != nil {
 			pluginClient.Kill()
 			return nil, nil, fmt.Errorf("failed to build mount for resolv.conf: %v", err)
@@ -82,6 +96,17 @@ func (d *Driver) startTaskLinux(cfg *drivers.TaskConfig, driverConfig *TaskConfi
 		cfg.Mounts = append(cfg.Mounts, dnsMount)
 	} else {
 		etcpaths = append(etcpaths, "/etc/resolv.conf")
+	}
+
+	hostsMount, err := hostnames.GenerateEtcHostsMount(cfg.TaskDir().Dir, cfg.NetworkIsolation, nil)
+	if err != nil {
+		pluginClient.Kill()
+		return nil, nil, fmt.Errorf("failed to build mount for hosts file: %v", err)
+	}
+	if hostsMount != nil {
+		cfg.Mounts = append(cfg.Mounts, hostsMount)
+	} else {
+		etcpaths = append(etcpaths, "/etc/hosts")
 	}
 
 	for _, f := range etcpaths {

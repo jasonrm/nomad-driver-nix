@@ -19,23 +19,19 @@ job "nix-example-batch" {
       }
     }
 
-    # Demonstrate curl with SSL/CA certificates.
-    # Including the cacert package adds ca-bundle.crt to /etc/ssl/certs/
-    # in the profile, which gets bind-mounted into the container.
+    # Demonstrate curl with SSL/CA certificates. The driver includes cacert
+    # and sets common trust-store environment variables by default.
     task "nix-curl-ssl" {
       driver = "nix"
 
       config {
         packages = [
-          "#curl", "#cacert"
+          "#curl"
         ]
         command = "curl"
         args = [
           "https://nixos.org"
         ]
-      }
-      env = {
-        SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt"
       }
     }
 
