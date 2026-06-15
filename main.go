@@ -22,8 +22,12 @@ var version = func() string {
 	return m.Version
 }()
 
+// buildSHA is set at build time via ldflags.
+var buildSHA = "unknown"
+
 func main() {
 	nix.PluginVersion = version
+	nix.PluginBuildSHA = buildSHA
 	plugins.Serve(factory)
 }
 

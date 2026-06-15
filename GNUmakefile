@@ -1,6 +1,7 @@
 PLUGIN_BINARY=nix-driver
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
-LDFLAGS := -ldflags "-X main.version=$(VERSION)"
+BUILD_SHA ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+LDFLAGS := -ldflags "-X main.version=$(VERSION) -X main.buildSHA=$(BUILD_SHA)"
 
 ifeq ($(shell uname -s),Darwin)
 CGO_ENABLED := 0

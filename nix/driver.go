@@ -30,8 +30,9 @@ const (
 	taskHandleVersion = 1
 )
 
-// PluginVersion is set from main.go at startup.
+// PluginVersion and PluginBuildSHA are set from main.go at startup.
 var PluginVersion = "0.2.0-dev"
+var PluginBuildSHA = "unknown"
 
 var (
 	PluginID = loader.PluginID{
