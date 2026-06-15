@@ -62,10 +62,10 @@ nomad-driver-nix.packages.${system}.nomad-driver-nix
 make build
 ```
 
-This produces a `nomad-driver-nix` binary. Version is injected from git tags:
+This produces a `nomad-driver-nix` binary. Version and build SHA are injected from git:
 
 ```sh
-VERSION=0.2.0 make build
+VERSION=0.2.0 BUILD_SHA=abc1234 make build
 ```
 
 ## Agent configuration

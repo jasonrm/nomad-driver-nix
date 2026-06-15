@@ -28,6 +28,7 @@ buildGoModule (finalAttrs: {
     "-s"
     "-w"
     "-X main.version=${finalAttrs.version}"
+    "-X main.buildSHA=${if rev != null then rev else "unknown"}"
   ];
 
   meta = {

@@ -57,9 +57,10 @@
         nomad-dev-build = pkgs.writeShellScriptBin "nomad-dev-build" ''
           set -euo pipefail
           VERSION="''${VERSION:-$(${pkgs.git}/bin/git describe --tags --always --dirty 2>/dev/null || echo "dev")}"
-          echo "Building nix-driver (version: $VERSION, CGO_ENABLED=${cgoEnabled})..."
+          BUILD_SHA="''${BUILD_SHA:-$(${pkgs.git}/bin/git rev-parse --short HEAD 2>/dev/null || echo "unknown")}"
+          echo "Building nix-driver (version: $VERSION, build SHA: $BUILD_SHA, CGO_ENABLED=${cgoEnabled})..."
           CGO_ENABLED=${cgoEnabled} ${pkgs.go}/bin/go build \
-            -ldflags "-X main.version=$VERSION" \
+            -ldflags "-X main.version=$VERSION -X main.buildSHA=$BUILD_SHA" \
             -o nix-driver .
           echo "Build complete: ./nix-driver"
         '';

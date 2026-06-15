@@ -38,6 +38,9 @@ func (d *Driver) buildFingerprint() *drivers.Fingerprint {
 	}
 
 	fp.Attributes["driver.nix"] = pstructs.NewBoolAttribute(true)
+	fp.Attributes["driver.nix.version"] = pstructs.NewStringAttribute(PluginVersion)
+	fp.Attributes["driver.nix.build_sha"] = pstructs.NewStringAttribute(PluginBuildSHA)
+	fp.Attributes["driver.nix.os_type"] = pstructs.NewStringAttribute(runtime.GOOS)
 	fp.Attributes["driver.nix.nix_path"] = pstructs.NewStringAttribute(nixPath)
 
 	switch runtime.GOOS {
