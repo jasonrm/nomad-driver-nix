@@ -221,6 +221,9 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	if err := cfg.DecodeDriverConfig(&driverConfig); err != nil {
 		return nil, nil, fmt.Errorf("failed to decode driver config: %v", err)
 	}
+	if cfg.Env == nil {
+		cfg.Env = make(map[string]string)
+	}
 	if driverConfig.Bind == nil {
 		driverConfig.Bind = make(hclutils.MapStrStr)
 	}
@@ -248,7 +251,9 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	}
 
 	// Always include coreutils for a baseline environment (env, cat, ls, etc.)
-	driverConfig.Packages = append(driverConfig.Packages, nixpkgs+"#coreutils")
+	// and cacert so TLS clients have a trust store without per-job boilerplate.
+	driverConfig.Packages = appendPackageIfMissing(driverConfig.Packages, nixpkgs+"#coreutils")
+	driverConfig.Packages = appendPackageIfMissing(driverConfig.Packages, nixpkgs+"#cacert")
 
 	// Emit build event
 	d.eventer.EmitEvent(&drivers.TaskEvent{
@@ -292,6 +297,7 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	if err := os.Symlink(nixResult.ProfilePath, profileSymlink); err != nil {
 		return nil, nil, fmt.Errorf("failed to symlink nix profile into task dir: %v", err)
 	}
+	setDefaultCAEnv(cfg.Env, nixResult)
 
 	switch runtime.GOOS {
 	case "linux":
@@ -301,6 +307,30 @@ func (d *Driver) StartTask(cfg *drivers.TaskConfig) (*drivers.TaskHandle, *drive
 	default:
 		return nil, nil, fmt.Errorf("unsupported platform: %s", runtime.GOOS)
 	}
+}
+
+func appendPackageIfMissing(packages []string, pkg string) []string {
+	for _, existing := range packages {
+		if existing == pkg {
+			return packages
+		}
+	}
+	return append(packages, pkg)
+}
+
+func setDefaultCAEnv(env map[string]string, nixResult *NixPrepResult) {
+	caBundle := filepath.Join(nixResult.ProfilePath, "etc", "ssl", "certs", "ca-bundle.crt")
+	setDefaultEnv(env, "SSL_CERT_FILE", caBundle)
+	setDefaultEnv(env, "NIX_SSL_CERT_FILE", caBundle)
+	setDefaultEnv(env, "CURL_CA_BUNDLE", caBundle)
+	setDefaultEnv(env, "GIT_SSL_CAINFO", caBundle)
+}
+
+func setDefaultEnv(env map[string]string, key string, value string) {
+	if _, ok := env[key]; ok {
+		return
+	}
+	env[key] = value
 }
 
 func (d *Driver) finishStartTask(cfg *drivers.TaskConfig, handle *drivers.TaskHandle, exec executor.Executor, pluginClient *plugin.Client, ps *executor.ProcessState) (*drivers.TaskHandle, *drivers.DriverNetwork, error) {

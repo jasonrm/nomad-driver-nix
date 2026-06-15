@@ -165,7 +165,7 @@ task "example" {
 
     # Host path -> container path bind mounts
     bind           = [{ "/data" = "/mnt/data" }]
-    bind_read_only = [{ "/etc/hosts" = "/etc/hosts" }]
+    bind_read_only = [{ "/data/config" = "/config" }]
 
     # Linux-only (ignored on macOS with a warning)
     pid_mode = "private"
@@ -180,7 +180,7 @@ task "example" {
 |--------|------|----------|---------|-------------|
 | `command` | `string` | yes | — | Command to run (must be on PATH from installed packages) |
 | `args` | `list(string)` | no | `[]` | Arguments passed to the command |
-| `packages` | `list(string)` | no | `[]` | Nix packages to install; `#`-prefixed entries are expanded with the configured nixpkgs |
+| `packages` | `list(string)` | no | `[]` | Nix packages to install; `#`-prefixed entries are expanded with the configured nixpkgs. The driver also adds `#coreutils` and `#cacert`. |
 | `nixpkgs` | `string` | no | *(agent default)* | Override the nixpkgs flake ref for this task |
 | `sandbox` | `bool` | no | `true` | macOS: enable `sandbox-exec` file access restriction |
 | `bind` | `list(map(string))` | no | `[]` | Read-write host bind mounts (`{ "/host/path" = "/container/path" }`) |
@@ -197,6 +197,10 @@ Each task is launched with these environment variables in addition to the standa
 | Variable | Description |
 |----------|-------------|
 | `PATH` | On Linux, set to `/bin` (the profile's `bin/` is bind-mounted there); on macOS, set to the profile's `bin/` store path directly. |
+| `SSL_CERT_FILE` | Defaults to the profile's `ca-bundle.crt` from `#cacert`, unless explicitly set by the task. |
+| `NIX_SSL_CERT_FILE` | Defaults to the same CA bundle, unless explicitly set by the task. |
+| `CURL_CA_BUNDLE` | Defaults to the same CA bundle, unless explicitly set by the task. |
+| `GIT_SSL_CAINFO` | Defaults to the same CA bundle, unless explicitly set by the task. |
 
 The driver also creates a stable symlink at `nix-profile` inside the task's local dir, pointing to the merged nix profile. Reference it from `args`, `command`, and `template` blocks via the standard Nomad task-dir env vars to point at package contents without baking nix store paths into job specs:
 
@@ -206,6 +210,8 @@ The driver also creates a stable symlink at `nix-profile` inside the task's loca
 > **Note:** the driver advertises `FSIsolationChroot` on Linux, so Nomad expands `${NOMAD_TASK_DIR}`, `${NOMAD_SECRETS_DIR}`, and `${NOMAD_ALLOC_DIR}` to the in-chroot paths (`/local`, `/secrets`, `/alloc`). On macOS there is no chroot and the same vars expand to the host alloc path. Either way, using `${NOMAD_TASK_DIR}` keeps the job spec portable. Avoid hardcoding `/local/...` — that literal path only exists inside the Linux chroot.
 
 The symlink target is the underlying store path. On Linux the closure is bind-mounted into the container at the same paths, and on macOS the SBPL allow list already covers it, so the symlink resolves correctly at task runtime in both cases.
+
+On Linux, the driver mounts `/etc/resolv.conf` and `/etc/hosts` into the chroot. If a job does not provide a Nomad `network { dns { ... } }` block and the host resolver file has no nameservers or only loopback nameservers such as `127.0.0.53`, the driver writes a task-local resolver config using `1.1.1.1` and `8.8.8.8`. Job DNS config still takes precedence.
 
 ## Examples
 
@@ -230,20 +236,16 @@ job "nix-example-batch" {
 
 ### SSL/CA certificates
 
-Include `#cacert` and set the `SSL_CERT_FILE` environment variable:
+The driver includes `#cacert` by default and sets the common TLS trust-store environment variables automatically. A HTTPS client can usually be declared with only its own package:
 
 ```hcl
 task "curl-ssl" {
   driver = "nix"
 
   config {
-    packages = ["#curl", "#cacert"]
+    packages = ["#curl"]
     command  = "curl"
     args     = ["https://nixos.org"]
-  }
-
-  env = {
-    SSL_CERT_FILE = "/etc/ssl/certs/ca-bundle.crt"
   }
 }
 ```
