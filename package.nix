@@ -20,7 +20,7 @@ buildGoModule (finalAttrs: {
     ];
   };
 
-  vendorHash = "sha256-ckeCmjahauOZNsiLGazNLBxe7vNQLZSp8LKCceZ7opQ=";
+  vendorHash = "sha256-/12rGg+wuRDP7iBjnQcInZxBqC8d0+kAC+hkVWTrSqA=";
 
   subPackages = [ "." ];
 
