@@ -32,8 +32,8 @@ sed -i '' '/^package nix$/a\
 \
 // This file contains upstream exec driver methods that are used as-is by the\
 // nix driver. It is generated from the upstream nomad exec driver and should\
-// only need a package rename and pruning of nix-overridden declarations when\
-// updating. See pull-upstream.sh.
+// only need a package rename, pruning of nix-overridden declarations, and the\
+// recovery logging adjustment in pull-upstream.sh when updating.
 ' driver_upstream.go
 
 # Remove declarations that nix overrides.
@@ -70,6 +70,17 @@ del_between '^func (d \*Driver) TaskConfigSchema' '^}$' driver_upstream.go
 del_between '^// Capabilities is returned' '^}$' driver_upstream.go  # Capabilities
 del_between '^func (d \*Driver) buildFingerprint' '^}$' driver_upstream.go
 del_between '^func (d \*Driver) StartTask' '^}$' driver_upstream.go
+
+# Nomad attempts recovery even for completed tasks. It logs failures for running
+# tasks itself, so the driver's reattachment diagnostic must not be error-level.
+# Fail visibly if upstream changes the statement instead of silently losing this fix.
+grep -Fq 'd.logger.Error("failed to reattach to executor", "error", err, "task_id", handle.Config.ID)' driver_upstream.go
+sed -i '' 's/d.logger.Error("failed to reattach to executor"/d.logger.Debug("failed to reattach to executor"/' driver_upstream.go
+sed -i '' '/d.logger.Debug("failed to reattach to executor"/i\
+		// Nomad also recovers completed tasks whose executors are already gone.\
+		// It logs recovery failures for running tasks itself; keep this diagnostic\
+		// at debug level so successful prestart/batch tasks do not emit errors.
+' driver_upstream.go
 
 echo "  driver_upstream.go updated"
 

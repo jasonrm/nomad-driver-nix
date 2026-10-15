@@ -3,8 +3,8 @@
 
 // This file contains upstream exec driver methods that are used as-is by the
 // nix driver. It is generated from the upstream nomad exec driver and should
-// only need a package rename and pruning of nix-overridden declarations when
-// updating. See pull-upstream.sh.
+// only need a package rename, pruning of nix-overridden declarations, and the
+// recovery logging adjustment in pull-upstream.sh when updating.
 
 package nix
 
@@ -99,7 +99,10 @@ func (d *Driver) RecoverTask(handle *drivers.TaskHandle) error {
 		d.compute,
 	)
 	if err != nil {
-		d.logger.Error("failed to reattach to executor", "error", err, "task_id", handle.Config.ID)
+		// Nomad also recovers completed tasks whose executors are already gone.
+		// It logs recovery failures for running tasks itself; keep this diagnostic
+		// at debug level so successful prestart/batch tasks do not emit errors.
+		d.logger.Debug("failed to reattach to executor", "error", err, "task_id", handle.Config.ID)
 		return fmt.Errorf("failed to reattach to executor: %v", err)
 	}
 
