@@ -17,12 +17,25 @@ buildGoModule (finalAttrs: {
       ./main.go
       ./metadata.json
       ./nix
+      ./patches
     ];
   };
 
   vendorHash = "sha256-/12rGg+wuRDP7iBjnQcInZxBqC8d0+kAC+hkVWTrSqA=";
 
+  # Apply after buildGoModule installs vendor/, not while producing goModules.
+  # This keeps the dependency hash unchanged and patches only our binary.
+  postConfigure = ''
+    chmod -R u+w vendor/github.com/hashicorp/nomad/drivers/shared/executor
+    patch --batch --fuzz=0 -p1 < patches/executor-shutdown-diagnostics.patch
+    cp patches/shutdown_diagnostics{,_linux}.go \
+      vendor/github.com/hashicorp/nomad/drivers/shared/executor/
+  '';
+
   subPackages = [ "." ];
+  postCheck = ''
+    go test ./patches
+  '';
 
   ldflags = [
     "-s"

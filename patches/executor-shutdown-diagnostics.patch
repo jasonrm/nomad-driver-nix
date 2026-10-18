@@ -1,0 +1,13 @@
+--- a/vendor/github.com/hashicorp/nomad/drivers/shared/executor/executor_linux_cgo.go
++++ b/vendor/github.com/hashicorp/nomad/drivers/shared/executor/executor_linux_cgo.go
+@@ -94,7 +94,9 @@
+ 	for {
+ 		signal := <-l.sigChan
+ 		if signal == syscall.SIGTERM || signal == syscall.SIGINT {
+-			l.Shutdown("SIGINT", 0)
++			traceExecutorSignalShutdown(l.logger, signal, func() error {
++				return l.Shutdown("SIGINT", 0)
++			})
+ 			break
+ 		}
+ 

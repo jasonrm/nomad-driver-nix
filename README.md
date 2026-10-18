@@ -68,6 +68,40 @@ This produces a `nomad-driver-nix` binary. Version and build SHA are injected fr
 VERSION=0.2.0 BUILD_SHA=abc1234 make build
 ```
 
+### Host shutdown diagnostics (Nix builds)
+
+The Nix package instruments Nomad's embedded Linux isolated executor to diagnose
+processes left waiting during host reboot/power-off. It does **not** change task
+termination, force executor exit, or change agent-restart recovery behavior.
+
+Build with `nix build` and deploy `result/bin/nomad-driver-nix`. Plain `make build`,
+`go build`, and `nomad-dev-build` do not apply this dependency instrumentation.
+Existing executor processes continue running the old binary: installing the new
+plugin alone is not enough. Restart the affected allocations in a suitable
+maintenance window so their executors use the new build.
+
+On SIGTERM/SIGINT, look for `executor shutdown: pid=... signal=...` messages:
+
+- `signal received; cleanup starting`: the executor caught the signal.
+- `cleanup has not returned after 5s`: cleanup was still pending at that point.
+- `cleanup returned ... (error=...)`: cleanup finished (or failed); the signal
+  handler is returning **without exiting the executor**, as in upstream Nomad.
+
+Messages include the executor PID for comparison with systemd's `Waiting for
+process` list. They are written best-effort to the task's
+`<alloc-dir>/<task-name>/executor.out` and, where permitted, `/dev/kmsg` so they
+can appear on the console/remote KVM even after journald stops. File logging is
+asynchronous to avoid blocking cleanup on a stalled filesystem. Kernel messages
+may be unavailable due to permissions, console log level, or rate limiting;
+absence of a message is not proof that the signal was never received. Capture
+the shutdown console, since late messages may not survive in the next boot's
+journal. The five-second warning is diagnostic, **not** a shutdown timeout.
+
+The patch is maintained in `patches/` and targets the Nomad version in `go.mod`.
+`go test ./patches` tests the observation logic without requiring a reboot or
+sending signals to live tasks. A real Linux shutdown is still needed to identify
+which path the affected executors take.
+
 ## Agent configuration
 
 The plugin is configured in the Nomad agent config under `plugin "nomad-driver-nix"`. See [`example/agent.hcl`](example/agent.hcl) for a full example.
