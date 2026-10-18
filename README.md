@@ -68,39 +68,50 @@ This produces a `nomad-driver-nix` binary. Version and build SHA are injected fr
 VERSION=0.2.0 BUILD_SHA=abc1234 make build
 ```
 
-### Host shutdown diagnostics (Nix builds)
+### Host shutdown fix (Nix builds)
 
-The Nix package instruments Nomad's embedded Linux isolated executor to diagnose
-processes left waiting during host reboot/power-off. It does **not** change task
-termination, force executor exit, or change agent-restart recovery behavior.
+The Nix package patches Nomad's embedded Linux isolated executor so that a direct
+SIGTERM/SIGINT cleans up the task **and exits the executor process**. Previously,
+cleanup returned but the RPC server stayed alive, delaying host reboot/power-off
+until systemd killed the leftover executors.
+
+Successful signal cleanup exits immediately with status 0. Cleanup errors exit
+with status 1; a 20-second watchdog also exits with status 1 if cleanup stalls,
+including during resource destruction. Failure logging has an additional maximum
+100 ms budget so a stalled allocation filesystem cannot prevent exit. This is
+not a guarantee that blocked kernel operations or all task resources are cleaned
+up: the watchdog is a last-resort process exit, not a replacement for draining.
+
+The change applies only to direct signals in the standalone executor process.
+Normal task-stop RPCs, task kill timeouts, and reattachment after agent connection
+loss are unchanged. Keep Nomad's service configuration that preserves executors
+on agent restart; directly signaling executors still stops their workloads.
 
 Build with `nix build` and deploy `result/bin/nomad-driver-nix`. Plain `make build`,
-`go build`, and `nomad-dev-build` do not apply this dependency instrumentation.
-Existing executor processes continue running the old binary: installing the new
-plugin alone is not enough. Restart the affected allocations in a suitable
-maintenance window so their executors use the new build.
+`go build`, and `nomad-dev-build` do **not** apply this dependency patch. Existing
+executor processes keep running the old binary: restart affected allocations in
+a suitable maintenance window after deploying the new plugin.
 
-On SIGTERM/SIGINT, look for `executor shutdown: pid=... signal=...` messages:
+Healthy shutdown is quiet. Failures are logged best-effort to the task's
+`<alloc-dir>/<task-name>/executor.out`, including the executor PID. The temporary
+kernel-console diagnostics have been removed. Late logs may not survive reboot.
 
-- `signal received; cleanup starting`: the executor caught the signal.
-- `cleanup has not returned after 5s`: cleanup was still pending at that point.
-- `cleanup returned ... (error=...)`: cleanup finished (or failed); the signal
-  handler is returning **without exiting the executor**, as in upstream Nomad.
+The patch is in `patches/` and targets the Nomad version in `go.mod`.
+`go test ./patches` exercises real subprocess exits on signals, cleanup errors,
+blocked cleanup, and blocked logging. It also tests a running universal-executor
+workload across disconnect/reattachment and a normal task-stop RPC.
+Nix's Linux/cgo build additionally tests
+the actual patched executor's signal exit, ordinary Shutdown RPC, and connection
+loss/reattachment without launching tasks or requiring root. Before production
+rollout, validate on a disposable Linux node with running allocations:
 
-Messages include the executor PID for comparison with systemd's `Waiting for
-process` list. They are written best-effort to the task's
-`<alloc-dir>/<task-name>/executor.out` and, where permitted, `/dev/kmsg` so they
-can appear on the console/remote KVM even after journald stops. File logging is
-asynchronous to avoid blocking cleanup on a stalled filesystem. Kernel messages
-may be unavailable due to permissions, console log level, or rate limiting;
-absence of a message is not proof that the signal was never received. Capture
-the shutdown console, since late messages may not survive in the next boot's
-journal. The five-second warning is diagnostic, **not** a shutdown timeout.
+1. Restart the agent; verify workload PIDs remain unchanged and tasks recover.
+2. Stop a job normally; verify its configured signal/grace period still works.
+3. Reboot with jobs running; verify executors no longer delay shutdown.
 
-The patch is maintained in `patches/` and targets the Nomad version in `go.mod`.
-`go test ./patches` tests the observation logic without requiring a reboot or
-sending signals to live tasks. A real Linux shutdown is still needed to identify
-which path the affected executors take.
+Those host-level checks require a real Nomad deployment; unit/subprocess tests
+alone do not validate workload cleanup in Linux namespaces and cgroups.
+An upstream report draft and porting notes are in `patches/UPSTREAM.md`.
 
 ## Agent configuration
 

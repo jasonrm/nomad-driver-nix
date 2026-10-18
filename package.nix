@@ -27,14 +27,14 @@ buildGoModule (finalAttrs: {
   # This keeps the dependency hash unchanged and patches only our binary.
   postConfigure = ''
     chmod -R u+w vendor/github.com/hashicorp/nomad/drivers/shared/executor
-    patch --batch --fuzz=0 -p1 < patches/executor-shutdown-diagnostics.patch
-    cp patches/shutdown_diagnostics{,_linux}.go \
+    patch --batch --fuzz=0 -p1 < patches/executor-signal-shutdown.patch
+    cp patches/signal_shutdown.go \
       vendor/github.com/hashicorp/nomad/drivers/shared/executor/
   '';
 
   subPackages = [ "." ];
   postCheck = ''
-    go test ./patches
+    NOMAD_TEST_PATCHED_EXECUTOR=1 go test -timeout 2m ./patches
   '';
 
   ldflags = [
